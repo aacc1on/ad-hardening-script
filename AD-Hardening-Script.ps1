@@ -6,13 +6,13 @@
     Active Directory Hardening Script - 12-Point Security Checklist (Multilingual Support)
     
 .DESCRIPTION
-    Այս սկրիպտը իրականացնում է Active Directory-ի պաշտպանության 12 կրիտիկական միջոցները՝
-    նվազեցնելու համար հարձակումների մակերեսը և ուժեղացնելու անվտանգությունը:
-    Աջակցում է անգլերեն և ռուսերեն AD խմբերին:
+    This script implements 12 critical Active Directory hardening measures
+    to reduce the attack surface and improve security.
+    It is compatible with AD environments using English and Russian group names.
     
 .NOTES
-    Անհրաժեշտ է Domain Admin իրավունքներ
-    Կատարել նախքան production-ում օգտագործելը test միջավայրում
+    Requires Domain Admin privileges.
+    Test in a non-production environment before deploying.
     
 .EXAMPLE
     .\AD-Hardening-Script.ps1 -WhatIf
@@ -34,14 +34,14 @@ param(
     [string]$LogPath = "C:\ADHardening_Logs"
 )
 
-# Գլոբալ փոփոխականներ
+# Global variables
 $Script:ErrorCount = 0
 $Script:WarningCount = 0
 $Script:SuccessCount = 0
 $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $LogFile = Join-Path $LogPath "ADHardening_$Timestamp.log"
 
-# Ստեղծել log պանակը եթե չկա
+# Create log folder if missing
 if (-not (Test-Path $LogPath)) {
     New-Item -ItemType Directory -Path $LogPath -Force | Out-Null
 }
@@ -92,7 +92,7 @@ function Get-DomainInfo {
 function Get-ADGroupByRID {
     <#
     .SYNOPSIS
-        Գտնել AD խումբը RID-ով (աշխատում է ցանկացած լեզվով)
+        Find an AD group by RID (works with any language)
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -114,7 +114,7 @@ function Get-ADGroupByRID {
 function Get-PrivilegedGroups {
     <#
     .SYNOPSIS
-        Ստանալ privileged խմբերի ցանկը (աշխատում է անգլերեն և ռուսերեն AD-ների հետ)
+        Get a list of privileged groups (works with English and Russian ADs)
     #>
     
     # Well-known RIDs for privileged groups
@@ -155,13 +155,13 @@ Write-Log "========================================" -Level Info
 Write-Log "AD Hardening Script Started" -Level Info
 Write-Log "========================================" -Level Info
 
-# Ստուգել Admin իրավունքները
+# Check Administrator privileges
 if (-not (Test-IsAdmin)) {
     Write-Log "This script requires Administrator privileges. Please run as Administrator." -Level Error
     exit 1
 }
 
-# Ստուգել ActiveDirectory մոդուլի առկայությունը
+# Check for ActiveDirectory module
 try {
     Import-Module ActiveDirectory -ErrorAction Stop
     Write-Log "ActiveDirectory module imported successfully" -Level Success
@@ -171,7 +171,7 @@ catch {
     exit 1
 }
 
-# Ստանալ Domain տեղեկությունները
+# Retrieve Domain information
 $DomainInfo = Get-DomainInfo
 Write-Log "Domain: $($DomainInfo.DomainName)" -Level Info
 Write-Log "Domain DN: $($DomainInfo.DomainDN)" -Level Info
@@ -180,7 +180,7 @@ Write-Log "PDC Emulator: $($DomainInfo.DomainController)" -Level Info
 #endregion
 
 #region 1. Implement Account Lockout Policies
-# Կրիտերիա 1: Կիրառել հաշվի արգելափակման քաղաքականություն
+# Criterion 1: Apply account lockout policy
 
 function Set-AccountLockoutPolicy {
     Write-Log "`n[1/12] Implementing Account Lockout Policies..." -Level Info
@@ -191,12 +191,12 @@ function Set-AccountLockoutPolicy {
     }
     
     try {
-        $LockoutThreshold = 5  # Թույլատրելի սխալ փորձերի քանակ
-        $LockoutDuration = 30  # Արգելափակման տևողություն (րոպե)
-        $LockoutObservationWindow = 30  # Հետևման պատուհան (րոպե)
+        $LockoutThreshold = 5  # Allowed number of failed attempts
+        $LockoutDuration = 30  # Lockout duration (minutes)
+        $LockoutObservationWindow = 30  # Observation window (minutes)
         
         if ($PSCmdlet.ShouldProcess("Default Domain Policy", "Configure Account Lockout")) {
-            # Օգտագործել net accounts հրամանը
+            # Use the net accounts command
             Invoke-Expression "net accounts /lockoutthreshold:$LockoutThreshold" | Out-Null
             Invoke-Expression "net accounts /lockoutduration:$LockoutDuration" | Out-Null
             Invoke-Expression "net accounts /lockoutwindow:$LockoutObservationWindow" | Out-Null
@@ -212,17 +212,17 @@ function Set-AccountLockoutPolicy {
 #endregion
 
 #region 2. Limit LDAP Access
-# Կրիտերիա 2: Սահմանափակել LDAP մուտքը
+# Criterion 2: Limit LDAP access
 
 function Set-LDAPAccessRestrictions {
     Write-Log "`n[2/12] Configuring LDAP Access Restrictions..." -Level Info
     
     try {
-        # Միացնել LDAP signing պահանջը
+        # Enable requirement for LDAP signing
         $registryPath = "HKLM:\SYSTEM\CurrentControlSet\Services\NTDS\Parameters"
         
-        if ($PSCmdlet.ShouldProcess("LDAP Server", "Enable LDAP Signing")) {
-            # LDAP Signing պահանջել
+            if ($PSCmdlet.ShouldProcess("LDAP Server", "Enable LDAP Signing")) {
+            # Configure LDAP signing requirements
             if (-not (Test-Path $registryPath)) {
                 Write-Log "Registry path not found. This might not be a Domain Controller." -Level Warning
                 return
@@ -233,7 +233,7 @@ function Set-LDAPAccessRestrictions {
             Write-Log "LDAP Signing enabled (requires DC restart)" -Level Success
         }
         
-        # Ստեղծել firewall rules LDAP-ի համար
+        # Create firewall rules for LDAP
         $ldapRules = @(
             @{Name="LDAP-Restrict-389"; Port=389; Protocol="TCP"},
             @{Name="LDAPS-Restrict-636"; Port=636; Protocol="TCP"}
@@ -266,7 +266,7 @@ function Set-LDAPAccessRestrictions {
 #endregion
 
 #region 3. Enforce Strong Password Policies
-# Կրիտերիա 3: Կիրառել ուժեղ գաղտնաբառերի քաղաքականություն
+# Criterion 3: Enforce strong password policy
 
 function Set-StrongPasswordPolicy {
     Write-Log "`n[3/12] Enforcing Strong Password Policies..." -Level Info
@@ -283,13 +283,13 @@ function Set-StrongPasswordPolicy {
         $PasswordHistoryCount = 24
         
         if ($PSCmdlet.ShouldProcess("Default Domain Policy", "Configure Password Policy")) {
-            # Կոնֆիգուրացնել password քաղաքականությունը
+            # Configure password policy
             Invoke-Expression "net accounts /minpwlen:$MinPasswordLength" | Out-Null
             Invoke-Expression "net accounts /maxpwage:$MaxPasswordAge" | Out-Null
             Invoke-Expression "net accounts /minpwage:$MinPasswordAge" | Out-Null
             Invoke-Expression "net accounts /uniquepw:$PasswordHistoryCount" | Out-Null
             
-            # Միացնել complexity պահանջները
+            # Enable complexity requirement
             $tempCfg = "$env:TEMP\secpol.cfg"
             $tempNewCfg = "$env:TEMP\secpol_new.cfg"
             
@@ -310,13 +310,13 @@ function Set-StrongPasswordPolicy {
 #endregion
 
 #region 4. Enable MFA (Multi-Factor Authentication)
-# Կրիտերիա 4: Միացնել բազմագործոն նույնականացում
+# Criterion 4: Enable multi-factor authentication
 
 function Enable-MFAConfiguration {
     Write-Log "`n[4/12] Configuring MFA Settings..." -Level Info
     
     try {
-        # Ստուգել privileged users-ի համար MFA պահանջը (օգտագործելով RID-ներ)
+        # Check MFA requirements for privileged users (using RIDs)
         Write-Log "Checking MFA requirements for privileged accounts..." -Level Info
         
         $privilegedGroups = Get-PrivilegedGroups
@@ -328,7 +328,7 @@ function Enable-MFAConfiguration {
                 
                 Write-Log "Group: $($groupInfo.Name) ($($groupInfo.EnglishName)) has $($members.Count) members" -Level Info
                 
-                # Ստուգել smart card պահանջը
+                # Check smart card requirement
                 foreach ($member in $members) {
                     if ($member.objectClass -eq 'user') {
                         $user = Get-ADUser $member.SamAccountName -Properties SmartcardLogonRequired -ErrorAction SilentlyContinue
@@ -354,14 +354,14 @@ function Enable-MFAConfiguration {
 #endregion
 
 #region 5. Enable LDAP Signing & Channel Binding
-# Կրիտերիա 5: Միացնել LDAP signing և channel binding
+# Criterion 5: Enable LDAP signing and channel binding
 
 function Enable-LDAPSigningAndChannelBinding {
     Write-Log "`n[5/12] Enabling LDAP Signing & Channel Binding..." -Level Info
     
     try {
         if ($PSCmdlet.ShouldProcess("Domain Controllers", "Enable LDAP Signing")) {
-            # Ստանալ բոլոր Domain Controllers-ները
+            # Retrieve all Domain Controllers
             $DCs = Get-ADDomainController -Filter * -ErrorAction SilentlyContinue
             
             if (-not $DCs) {
@@ -372,12 +372,12 @@ function Enable-LDAPSigningAndChannelBinding {
             foreach ($DC in $DCs) {
                 Write-Log "Configuring LDAP Signing on $($DC.HostName)..." -Level Info
                 
-                # Կոնֆիգուրացնել LDAP signing պահանջները
+                # Configure LDAP signing requirements
                 $scriptBlock = {
                     param($DCName)
                     
                     try {
-                        # LDAP Signing պահանջ
+                        # Require LDAP signing
                         $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\NTDS\Parameters"
                         if (Test-Path $regPath) {
                             Set-ItemProperty -Path $regPath -Name "LDAPServerIntegrity" -Value 2 -Type DWord -Force
@@ -393,10 +393,10 @@ function Enable-LDAPSigningAndChannelBinding {
                 
                 try {
                     if ($DC.HostName -eq $env:COMPUTERNAME) {
-                        # Լոկալ DC
+                        # Local DC
                         $result = & $scriptBlock -DCName $DC.HostName
                     } else {
-                        # Հեռավոր DC
+                        # Remote DC
                         $result = Invoke-Command -ComputerName $DC.HostName -ScriptBlock $scriptBlock -ArgumentList $DC.HostName -ErrorAction Stop
                     }
                     
@@ -422,20 +422,20 @@ function Enable-LDAPSigningAndChannelBinding {
 #endregion
 
 #region 6. Use Group Managed Service Accounts (gMSAs)
-# Կրիտերիա 6: Օգտագործել Group Managed Service Accounts
+# Criterion 6: Use Group Managed Service Accounts (gMSA)
 
 function Configure-gMSASupport {
     Write-Log "`n[6/12] Configuring Group Managed Service Accounts (gMSA) Support..." -Level Info
     
     try {
-        # Ստուգել KDS Root Key-ի առկայությունը
+        # Check for KDS Root Key existence
         $kdsRootKey = Get-KdsRootKey -ErrorAction SilentlyContinue
         
         if (-not $kdsRootKey) {
             if ($PSCmdlet.ShouldProcess("AD Forest", "Create KDS Root Key")) {
                 Write-Log "Creating KDS Root Key for gMSA support..." -Level Info
                 
-                # Ստեղծել KDS Root Key (տեստի համար immediate, production-ում հանել -EffectiveImmediately)
+                        # Create KDS Root Key (using -EffectiveImmediately for testing; remove in production)
                 Add-KdsRootKey -EffectiveImmediately -ErrorAction Stop | Out-Null
                 Write-Log "KDS Root Key created successfully" -Level Success
             }
@@ -444,7 +444,7 @@ function Configure-gMSASupport {
             Write-Log "KDS Root Key already exists" -Level Success
         }
         
-        # Ստուգել առկա service accounts-ները
+        # Check existing service accounts
         Write-Log "Checking for existing service accounts that should be converted to gMSA..." -Level Info
         
         $serviceAccounts = Get-ADUser -Filter {ServicePrincipalName -like "*"} -Properties ServicePrincipalName, PasswordLastSet -ErrorAction SilentlyContinue
@@ -474,20 +474,20 @@ function Configure-gMSASupport {
 #endregion
 
 #region 7. Enable Privileged Access Management (PAM)
-# Կրիտերիա 7: Միացնել Privileged Access Management
+# Criterion 7: Enable Privileged Access Management (PAM)
 
 function Enable-PrivilegedAccessManagement {
     Write-Log "`n[7/12] Configuring Privileged Access Management (PAM)..." -Level Info
     
     try {
-        # Ստեղծել Protected Users խումբ եթե չկա (Windows Server 2012 R2+)
+        # Ensure Protected Users group exists (Windows Server 2012 R2+)
         # Protected Users group RID: 525
         $protectedUsersGroup = Get-ADGroupByRID -RID 525
         
         if ($protectedUsersGroup) {
             Write-Log "Protected Users group exists: $($protectedUsersGroup.Name)" -Level Info
             
-            # Ստուգել privileged users-ին Protected Users խմբում
+            # Check privileged users are in Protected Users group
             $privilegedGroups = Get-PrivilegedGroups | Where-Object { $_.RID -in @(512, 519, 518) }  # DA, EA, SA only
             
             $protectedMembers = Get-ADGroupMember $protectedUsersGroup.DistinguishedName -ErrorAction SilentlyContinue
@@ -510,7 +510,7 @@ function Enable-PrivilegedAccessManagement {
             Write-Log "Protected Users group not found (requires Windows Server 2012 R2 or later)" -Level Warning
         }
         
-        # Ստուգել AdminSDHolder պրոցեսը
+        # Verify AdminSDHolder configuration
         Write-Log "Verifying AdminSDHolder configuration..." -Level Info
         $adminSDHolder = Get-ADObject -Identity "CN=AdminSDHolder,CN=System,$($DomainInfo.DomainDN)" -Properties * -ErrorAction SilentlyContinue
         if ($adminSDHolder) {
@@ -527,19 +527,19 @@ function Enable-PrivilegedAccessManagement {
 #endregion
 
 #region 8. Secure AD CS Configurations
-# Կրիտերիա 8: Ապահովել AD CS կոնֆիգուրացիաները
+# Criterion 8: Secure AD Certificate Services (AD CS) configurations
 
 function Secure-ADCSConfiguration {
     Write-Log "`n[8/12] Securing AD Certificate Services (AD CS) Configurations..." -Level Info
     
     try {
-        # Ստուգել AD CS-ի առկայությունը
+        # Check for AD CS presence
         $cas = certutil -config - -ping 2>&1
         
         if ($LASTEXITCODE -eq 0) {
             Write-Log "AD CS detected. Checking certificate templates..." -Level Info
             
-            # Ստանալ certificate templates
+            # Retrieve certificate templates
             $configDN = "CN=Configuration,$($DomainInfo.DomainDN)"
             $templatePath = "CN=Certificate Templates,CN=Public Key Services,CN=Services,$configDN"
             
@@ -550,7 +550,7 @@ function Secure-ADCSConfiguration {
             if ($templates) {
                 Write-Log "Found $($templates.Count) certificate templates" -Level Info
                 
-                # Ստուգել vulnerable templates (ESC1)
+                # Check for vulnerable templates (ESC1)
                 $vulnerableTemplates = $templates | Where-Object {
                     $_.'msPKI-Certificate-Name-Flag' -band 0x1  # ENROLLEE_SUPPLIES_SUBJECT
                 }
@@ -565,7 +565,7 @@ function Secure-ADCSConfiguration {
                     Write-Log "No ESC1 vulnerable templates detected" -Level Success
                 }
                 
-                # Ստուգել overly permissive templates
+                # Check for overly permissive templates
                 $permissiveCount = 0
                 foreach ($template in $templates | Select-Object -First 10) {
                     try {
@@ -607,13 +607,13 @@ function Secure-ADCSConfiguration {
 #endregion
 
 #region 9. Embrace Principle of Least Privilege
-# Կրիտերիա 9: Կիրառել Նվազագույն Արտոնությունների Սկզբունքը
+# Criterion 9: Apply Principle of Least Privilege
 
 function Implement-LeastPrivilege {
     Write-Log "`n[9/12] Implementing Principle of Least Privilege..." -Level Info
     
     try {
-        # Ստուգել privileged groups-ի անդամությունը (օգտագործելով RID-ներ)
+        # Audit privileged group memberships (using RIDs)
         Write-Log "Auditing privileged group memberships..." -Level Info
         
         $privilegedGroups = Get-PrivilegedGroups
@@ -631,12 +631,12 @@ function Implement-LeastPrivilege {
                             $user = Get-ADUser $member.SamAccountName -Properties Enabled, LastLogonDate, PasswordLastSet -ErrorAction SilentlyContinue
                             
                             if ($user) {
-                                # Ստուգել անակտիվ հաշիվները
+                                # Check for disabled accounts
                                 if (-not $user.Enabled) {
                                     Write-Log "  WARNING: Disabled user $($member.SamAccountName) is still in $($groupInfo.Name)" -Level Warning
                                 }
                                 
-                                # Ստուգել երկար ժամանակ չմտած users-ին
+                                # Check users who haven't logged in for a long time
                                 if ($user.LastLogonDate -and ((Get-Date) - $user.LastLogonDate).Days -gt 90) {
                                     Write-Log "  WARNING: User $($member.SamAccountName) hasn't logged in for $([math]::Round(((Get-Date) - $user.LastLogonDate).Days)) days" -Level Warning
                                 }
@@ -663,13 +663,13 @@ function Implement-LeastPrivilege {
 #endregion
 
 #region 10. Audit AD CS Setup
-# Կրիտերիա 10: Ստուգել AD CS-ի կարգավորումը
+# Criterion 10: Audit AD CS configuration
 
 function Audit-ADCSSetup {
     Write-Log "`n[10/12] Auditing AD CS Setup for Misconfigurations..." -Level Info
     
     try {
-        # Ստանալ PKI configuration
+        # Retrieve PKI configuration
         $configDN = "CN=Configuration,$($DomainInfo.DomainDN)"
         $pkiConfig = "CN=Public Key Services,CN=Services,$configDN"
         
@@ -678,7 +678,7 @@ function Audit-ADCSSetup {
         if ($pkiObjects) {
             Write-Log "PKI infrastructure detected" -Level Info
             
-            # Ստուգել Certification Authorities
+            # Check Certification Authorities
             $cas = Get-ADObject -SearchBase $pkiConfig -Filter {objectClass -eq "pKIEnrollmentService"} -Properties * -ErrorAction SilentlyContinue
             
             if ($cas) {
@@ -687,7 +687,7 @@ function Audit-ADCSSetup {
                 foreach ($ca in $cas) {
                     Write-Log "  CA: $($ca.Name)" -Level Info
                     
-                    # Ստուգել CA permissions
+                    # Check CA permissions
                     try {
                         $caAcl = Get-Acl "AD:$($ca.DistinguishedName)" -ErrorAction SilentlyContinue
                         if ($caAcl) {
@@ -716,7 +716,7 @@ function Audit-ADCSSetup {
                 Write-Log "No Certification Authorities found" -Level Info
             }
             
-            # Ստուգել certificate templates security
+            # Check certificate template security
             Write-Log "Checking certificate template security..." -Level Info
             $templatePath = "CN=Certificate Templates,CN=Public Key Services,CN=Services,$configDN"
             $templates = Get-ADObject -SearchBase $templatePath -Filter {objectClass -eq "pKICertificateTemplate"} -Properties * -ErrorAction SilentlyContinue
@@ -724,13 +724,13 @@ function Audit-ADCSSetup {
             if ($templates) {
                 $vulnerableCount = 0
                 foreach ($template in $templates) {
-                    # ESC1 - Ստուգել ENROLLEE_SUPPLIES_SUBJECT
+                    # ESC1 - Check ENROLLEE_SUPPLIES_SUBJECT
                     if ($template.'msPKI-Certificate-Name-Flag' -band 1) {
                         Write-Log "  ESC1 Vulnerable: $($template.Name) allows subject name specification" -Level Warning
                         $vulnerableCount++
                     }
                     
-                    # ESC2 - Ստուգել Any Purpose EKU  
+                    # ESC2 - Check Any Purpose EKU
                     if ($template.'msPKI-Certificate-Application-Policy' -contains "2.5.29.37.0") {
                         Write-Log "  ESC2 Vulnerable: $($template.Name) has Any Purpose EKU" -Level Warning
                         $vulnerableCount++
@@ -754,13 +754,13 @@ function Audit-ADCSSetup {
 #endregion
 
 #region 11. Monitor Issued Certificates
-# Կրիտերիա 11: Վերահսկել թողարկված սերտիֆիկատները
+# Criterion 11: Monitor issued certificates
 
 function Monitor-IssuedCertificates {
     Write-Log "`n[11/12] Monitoring Issued Certificates..." -Level Info
     
     try {
-        # Ստուգել AD-ում գրանցված սերտիֆիկատները
+        # Check certificates registered in AD
         Write-Log "Checking for certificates in AD..." -Level Info
         
         $usersWithCerts = Get-ADUser -Filter * -Properties userCertificate -ErrorAction SilentlyContinue | 
@@ -780,7 +780,7 @@ function Monitor-IssuedCertificates {
                         try {
                             $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 -ArgumentList @(,$certBytes)
                             
-                            # Ստուգել սերտիֆիկատի վավերականության ժամկետը
+                            # Check certificate validity period
                             $daysToExpiry = ($cert.NotAfter - (Get-Date)).Days
                             
                             if ($daysToExpiry -lt 0) {
@@ -820,13 +820,13 @@ function Monitor-IssuedCertificates {
 #endregion
 
 #region 12. Implement Security Monitoring and Alerting
-# Կրիտերիա 12: Կիրառել անվտանգության վերահսկում և զգուշացումներ
+# Criterion 12: Implement security monitoring and alerting
 
 function Implement-SecurityMonitoring {
     Write-Log "`n[12/12] Implementing Security Monitoring and Alerting..." -Level Info
     
     try {
-        # Ստուգել Windows Event Logs կոնֆիգուրացիան
+        # Check Windows Event Log configuration
         Write-Log "Checking Windows Event Log configuration..." -Level Info
         
         $criticalLogs = @(
@@ -856,11 +856,11 @@ function Implement-SecurityMonitoring {
             }
         }
         
-        # Ստեղծել monitoring script
+        # Create monitoring script
         Write-Log "Creating security monitoring script..." -Level Info
         
-        $monitoringScript = @'
-# Վերահսկել կասկածելի գործողությունները
+    $monitoringScript = @'
+    # Monitor suspicious activities
 $events = @(
     @{LogName="Security"; EventID=4625; Description="Failed logon attempts"},
     @{LogName="Security"; EventID=4672; Description="Special privileges assigned"},
@@ -892,7 +892,7 @@ foreach ($event in $events) {
         $monitoringScript | Out-File -FilePath $scriptPath -Force
         Write-Log "Monitoring script created: $scriptPath" -Level Success
         
-        # Միացնել Advanced Audit Policies
+        # Enable Advanced Audit Policies
         if ($PSCmdlet.ShouldProcess("Advanced Audit Policies", "Enable")) {
             Write-Log "Enabling Advanced Audit Policies..." -Level Info
             
@@ -931,7 +931,7 @@ try {
     Write-Log "Domain: $($DomainInfo.DomainName)`n" -Level Info
     
     if (-not $GenerateReportOnly) {
-        # Կատարել բոլոր hardening քայլերը
+        # Execute all hardening steps
         Set-AccountLockoutPolicy
         Set-LDAPAccessRestrictions
         Set-StrongPasswordPolicy
@@ -947,7 +947,7 @@ try {
     }
     else {
         Write-Log "Report-only mode: Auditing current configuration..." -Level Info
-        # Միայն ստուգել առանց փոփոխություններ կատարելու
+        # Audit only without making changes
         Enable-MFAConfiguration
         Secure-ADCSConfiguration
         Implement-LeastPrivilege
@@ -955,7 +955,7 @@ try {
         Monitor-IssuedCertificates
     }
     
-    # Վերջնական զեկույց
+    # Final report
     Write-Log "`n========================================" -Level Info
     Write-Log "AD Hardening Script Completed" -Level Info
     Write-Log "========================================" -Level Info
@@ -971,7 +971,7 @@ try {
     Write-Log "4. Implement continuous monitoring and regular audits" -Level Info
     Write-Log "5. Train administrators on new security policies" -Level Info
     
-    # Ստեղծել HTML զեկույց
+    # Generate HTML report
     $htmlReport = @"
 <!DOCTYPE html>
 <html>
